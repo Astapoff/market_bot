@@ -25,10 +25,13 @@ git clone https://github.com/Astapoff/market_bot.git
 TOKEN=<токен_вашего_бота_полученный_от_BotFather>
 ```
 
-Устанавливаем библиотеку telebot:
+Устанавливаем библиотеки:
 
 ```
 pip install pyTelegramBotAPI
+```
+```
+pip install python-dotenv
 ```
 
 
@@ -37,3 +40,6 @@ pip install pyTelegramBotAPI
 ```
 python3 bot.py
 ```
+
+# Автор
+Астапов Артём Олегович
