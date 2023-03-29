@@ -1,6 +1,10 @@
 import os
 import telebot
+import sqlite3
+import time
+import pandas as pd
 
+from datetime import datetime
 from dotenv import load_dotenv 
 
 load_dotenv()
@@ -9,8 +13,57 @@ secret_token = os.getenv('TOKEN')
 
 bot = telebot.TeleBot(secret_token)
 
+conn = sqlite3.connect('users.db')
+conn.execute('''CREATE TABLE IF NOT EXISTS users
+             (date_time TEXT PRIMARY KEY,
+              login TEXT,
+              marketing_budget REAL,
+              registrations REAL,
+              free_registrations REAL,
+              webinar_views REAL,
+              demand REAL,
+              payments REAL,
+              average_price REAL);''')
+conn.commit()
+conn.close()
+
+
+def bd_to_xlsx():
+    '''Импортирует данные из БД в файл Excel.'''
+    conn = sqlite3.connect('users.db')
+    df = pd.read_sql_query("SELECT * from users", conn)
+    df.to_excel('users.xlsx', index=False)
+
+
+def get_to_bd(message):
+    '''Занесение данных пользователя в базу данных.'''
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    login = message.from_user.username if message.from_user.username else message.from_user.first_name
+    values = [login, num1, num2, num3, num4, num5, num6, num7]
+    date_time = str(datetime.now().replace(microsecond=0))
+    cursor.execute("INSERT INTO users (date_time, login, marketing_budget, registrations, free_registrations, webinar_views, demand, payments, average_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (date_time,) + tuple(values))
+    conn.commit()
+    conn.close()
+
+
+def reminder(message):
+    '''Напоминает о подписке на канал через 1 час.'''
+    now = datetime.now() 
+    current_time = now.strftime("%H:%M")
+    target_time = str(int(current_time[:2]) + 1) + current_time[2:]
+    while True:
+        now = datetime.now()
+        current_time = now.strftime("%H:%M")
+        if current_time == target_time:
+            bot.send_message(message.chat.id, 'Не забудь подписаться на наш канал в телеграмме: https://t.me/norm_agency')
+            break
+        else:
+            time.sleep(10)
+
 
 def is_valid(n):
+    '''Проверка валидности введенного значения.'''
     if n.isnumeric() and '.' not in n and ',' not in n:
         if int(n) >= 0:
             return True
@@ -18,11 +71,15 @@ def is_valid(n):
         return False
 
 def for_fool(message):
+    '''Напоминание формата ввода значения.'''
     bot.send_message(message.chat.id, 'Число должно быть: положительное, целое, без пробелов, букв и других символов.', parse_mode='html')
     return
 
 @bot.message_handler(func=lambda message: message.text == "/start")
 def start(message):
+    '''Обработчик команды /start. 
+    Приветственный текст. 
+    Запрос маркетингового бюджета.'''
     global NAME
     NAME = message.from_user.first_name
     bot.send_message(message.chat.id, 'Привет!', parse_mode='html')
@@ -34,6 +91,7 @@ def start(message):
 
 @bot.message_handler(content_types=['text'])
 def get_num1(message):
+    '''Запрос кол-ва платных регистраций.'''
     global num1
     num1 = message.text
     if message.text == '/start':
@@ -49,6 +107,7 @@ def get_num1(message):
 
 @bot.message_handler(content_types=['text'])
 def get_num2(message):
+    '''Запрос кол-ва бесплатных регистраций.'''
     global num2
     num2 = message.text
     if message.text == '/start':
@@ -64,6 +123,7 @@ def get_num2(message):
 
 @bot.message_handler(content_types=['text'])
 def get_num3(message):
+    '''Запрос кол-ва просмотров вебинара.'''
     global num3
     num3 = message.text
     if message.text == '/start':
@@ -79,6 +139,7 @@ def get_num3(message):
 
 @bot.message_handler(content_types=['text'])
 def get_num4(message):
+    '''Запрос кол-ва заявок.'''
     global num4
     num4 = message.text
     if message.text == '/start':
@@ -94,6 +155,7 @@ def get_num4(message):
 
 @bot.message_handler(content_types=['text'])
 def get_num5(message):
+    '''Запрос кол-ва оплат.'''
     global num5
     num5 = message.text
     if message.text == '/start':
@@ -109,6 +171,7 @@ def get_num5(message):
 
 @bot.message_handler(content_types=['text'])
 def get_num6(message):
+    '''Запрос размера среднего чека.'''
     global num6
     num6 = message.text
     if message.text == '/start':
@@ -123,6 +186,7 @@ def get_num6(message):
             bot.register_next_step_handler(message, get_num6)
 
 def get_answer(result):
+    '''Формирование ответа с результатами.'''
     res_dict = {
         'Рекламного бюджета: ': round(result[0]),
         'Регистраций: ': round(result[1]),
@@ -147,6 +211,7 @@ def get_answer(result):
 
 @bot.message_handler(content_types=['text'])
 def get_num7_and_res(message):
+    '''Получение среднего чека и ответ пользователю.'''
     global num7
     num7 = message.text
     if message.text == '/start':
@@ -154,22 +219,25 @@ def get_num7_and_res(message):
     else:
         if is_valid(num7):
             num7 = int(num7)
-            # bot.send_message(message.chat.id, f'Средний чек - {num7} руб.')
             result = get_result()
             bot.send_message(message.chat.id, get_answer(result))
             bot.send_message(message.chat.id,
                              f'Хочешь, чтобы вебинарные воронки приносили твоему бизнесу больше денег? '
-                             f'Скорее оставляй заявку на бесплатную консультацию, и мы расскажем, как этого добиться!'
+                             f'Скорее оставляй заявку на бесплатную консультацию, и мы расскажем, как этого добиться!\n'
                              f'Оставить заявку: https://norm-agency.ru/#contact\n'
                              f'Наш канал в телеграмме: https://t.me/norm_agency',
                              parse_mode='html')
             bot.send_message(message.chat.id, f'Если хочешь начать сначала, нажми /start', parse_mode='html')
+            get_to_bd(message)
+            bd_to_xlsx()
+            reminder(message)
         else:
             for_fool(message)
             bot.register_next_step_handler(message, get_num7_and_res)
 
 @bot.message_handler(content_types=['text'])
 def get_result():
+    '''Расчет результата по авторской формуле.'''
     result = []
     res1 = (((num1 / num2) - 450) * num2)
     result.append(res1)
